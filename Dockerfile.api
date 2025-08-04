@@ -1,0 +1,40 @@
+# Dockerfile para la aplicación Flask
+FROM python:3.10-slim
+
+# Establecer directorio de trabajo
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    curl \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements y instalar dependencias Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código de la aplicación
+COPY . .
+
+# Crear directorios necesarios
+RUN mkdir -p /app/cv_storage \
+    && mkdir -p /app/temp_uploads \
+    && mkdir -p /app/utils \
+    && mkdir -p /app/services \
+    && mkdir -p /app/RAG
+
+# Establecer permisos
+RUN chmod -R 755 /app
+
+# Exponer puerto
+EXPOSE 5005
+
+# Variables de entorno por defecto
+ENV PYTHONPATH=/app
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
+
+# Comando de inicio
+CMD ["python", "app.py"]

@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # Servicio WAHA (WhatsApp HTTP API)
+  waha:
+    image: devlikeapro/waha:arm
+    container_name: waha_test
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - WAHA_PRINT_QR=true
+      - WAHA_SESSION_STORE_ON_DISK=true
+      - WAHA_LOG_LEVEL=debug
+    volumes:
+      - waha_sessions:/app/.sessions
+      - waha_files:/app/files
+    networks:
+      - chatbot_network  # ← Importante: agregar a la red
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/sessions"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Tu aplicación Flask (build local)
+  chatbot:  # ← Cambié el nombre del servicio para que coincida
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: chatbot_flask  # ← El container_name puede ser diferente
+    restart: unless-stopped
+    ports:
+      - "5005:5005"
+    environment:
+      # OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Google Sheets
+      - GOOGLE_SHEETS_SPREADSHEET_ID=${GOOGLE_SHEETS_SPREADSHEET_ID}
+      - GOOGLE_SHEETS_CREDENTIALS_FILE=/app/utils/project-asistente-openai-david-aa78b775fd69.json
+      
+      # WAHA - usar nombre del servicio waha
+      - WAHA_API_URL=http://waha:3000
+      - WAHA_SESSION=default
+      
+      # App config
+      - PORT=5005
+      - DEBUG=false
+      - CV_STORAGE_PATH=/app/cv_storage
+      - LOG_LEVEL=DEBUG
+      
+    volumes:
+      # Montar archivos de configuración
+      - ./utils/project-asistente-openai-david-aa78b775fd69.json:/app/utils/project-asistente-openai-david-aa78b775fd69.json:ro
+      # Almacenamiento persistente para CVs
+      - cv_storage:/app/cv_storage
+      # Base de conocimientos RAG
+      - ./RAG:/app/RAG
+    depends_on:
+      waha:
+        condition: service_healthy
+    networks:
+      - chatbot_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  waha_sessions:
+    driver: local
+  waha_files:
+    driver: local
+  cv_storage:
+    driver: local
+
+networks:
+  chatbot_network:
+    driver: bridge
